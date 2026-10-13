@@ -18,7 +18,10 @@ import subprocess
 import sys
 import webbrowser
 
-from playwright.sync_api import sync_playwright
+try:
+    from patchright.sync_api import sync_playwright  # Playwright sin huellas de automatización (Cloudflare)
+except ImportError:
+    from playwright.sync_api import sync_playwright
 
 URL = "https://bancodetalentos.com.co/"
 BASE = pathlib.Path(__file__).resolve().parent
@@ -55,7 +58,7 @@ def check():
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(
             str(PROFILE), channel="chrome", headless=False,
-            args=["--window-position=-32000,-32000", "--disable-blink-features=AutomationControlled"])
+            no_viewport=True, args=["--window-position=-32000,-32000"])
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             page.add_init_script("window.alert=()=>{};window.confirm=()=>false;")
@@ -65,6 +68,7 @@ def check():
             try:
                 btn.first.wait_for(state="visible", timeout=45000)
             except Exception:
+                page.screenshot(path=str(BASE / "fallo.png"))
                 if "Just a moment" in page.title():
                     return "ERROR", "Cloudflare no dejó pasar"
                 return "CAMBIO", "ya no aparece el botón 'hoja de vida'"

@@ -14,7 +14,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install playwright==1.63.0
+      - run: pip install patchright
       # Chrome real (ya viene en ubuntu-latest) con pantalla virtual: pasa Cloudflare mejor que headless
       - name: Revisar boton CARGA TU HOJA DE VIDA
         run: xvfb-run -a python watchdog.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: captura
+          path: fallo.png
+          if-no-files-found: ignore
