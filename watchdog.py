@@ -45,7 +45,10 @@ def log(msg):
     print(line)
 
 
-def notify(title, body):
+def notify(title, body, push=True):
+    """Aviso local: notificación de Windows + sonido + abrir la página; y push al celular (ntfy)."""
+    if push:
+        ntfy(title, body, "urgent")
     ps = f"""
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 $t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
@@ -56,7 +59,8 @@ $app = '{{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}}\\WindowsPowerShell\\v1.0\\power
 """
     subprocess.run(["powershell", "-NoProfile", "-Command", ps],
                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    webbrowser.open(URL)
+    if push:
+        webbrowser.open(URL)
 
 
 def check():
@@ -106,6 +110,8 @@ def check():
 
 def ntfy(title, body, priority="high"):
     topic = os.environ.get("NTFY_TOPIC")
+    if not topic and (BASE / "ntfy_topic.txt").exists():  # en el PC: archivo local, fuera de git
+        topic = (BASE / "ntfy_topic.txt").read_text().strip()
     if not topic:
         return
     req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=body.encode("utf-8"), headers={
@@ -182,7 +188,7 @@ def main():
         state["last"] = status
     state["errors"] = state.get("errors", 0) + 1 if status == "ERROR" else 0
     if state["errors"] == 6:  # ~1 hora fallando seguido
-        notify("Watchdog Banco de Talentos", "Lleva 6 revisiones fallando. Revisa watchdog.log.")
+        notify("Watchdog Banco de Talentos", "Lleva 6 revisiones fallando en el PC. Revisa watchdog.log.", push=False)
     STATE.write_text(json.dumps(state))
 
 

@@ -4,3 +4,4 @@ state.json
 __pycache__/
 fallo.png
 ci-state/
+ntfy_topic.txt
