@@ -1,0 +1,20 @@
+name: HOJA DE VIDA HABILITADA - Banco de Talentos
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install playwright==1.63.0
+      # Chrome real (ya viene en ubuntu-latest) con pantalla virtual: pasa Cloudflare mejor que headless
+      - name: Revisar boton CARGA TU HOJA DE VIDA
+        run: xvfb-run -a python watchdog.py
