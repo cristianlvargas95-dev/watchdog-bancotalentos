@@ -3,3 +3,4 @@ watchdog.log
 state.json
 __pycache__/
 fallo.png
+ci-state/

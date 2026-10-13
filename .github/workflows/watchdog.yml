@@ -24,8 +24,21 @@ jobs:
           python-version: "3.12"
       - run: pip install patchright
       # Chrome real (ya viene en ubuntu-latest) con pantalla virtual: pasa Cloudflare mejor que headless
+      # Estado entre corridas (ultima vez que vio la pagina, huella del sitio)
+      - uses: actions/cache/restore@v4
+        with:
+          path: ci-state
+          key: estado-${{ github.run_id }}
+          restore-keys: estado-
       - name: Revisar boton CARGA TU HOJA DE VIDA
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: xvfb-run -a python watchdog.py
+      - uses: actions/cache/save@v4
+        if: always() && !inputs.prueba
+        with:
+          path: ci-state
+          key: estado-${{ github.run_id }}
       # Push al celular (app ntfy) cuando el job falla = página habilitada (o modo prueba)
       - name: Aviso al celular
         if: failure()

@@ -10,12 +10,15 @@ Uso:  pythonw watchdog.py          (lo corre la tarea programada)
       python  watchdog.py --test   (fuerza una notificación de prueba)
 """
 import datetime
+import hashlib
 import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+import time
+import urllib.request
 import webbrowser
 
 try:
@@ -28,7 +31,10 @@ BASE = pathlib.Path(__file__).resolve().parent
 PROFILE = BASE / "chrome-profile"   # perfil propio: conserva la cookie de Cloudflare
 LOG = BASE / "watchdog.log"
 STATE = BASE / "state.json"
-CLOSED_RE = re.compile(r"siendo evaluado|retomemos", re.I)
+STATE_CI = BASE / "ci-state" / "state.json"
+BLIND_ALERT_H = 2      # horas sin ver la página antes de avisar "ciego"
+BLIND_REPEAT_H = 6     # repetir el aviso de ciego cada N horas
+CLOSED_RE =re.compile(r"siendo evaluado|retomemos", re.I)
 BUTTON_RE = re.compile(r"hoja de vida", re.I)
 
 
@@ -98,6 +104,57 @@ def check():
             ctx.close()
 
 
+def ntfy(title, body, priority="high"):
+    topic = os.environ.get("NTFY_TOPIC")
+    if not topic:
+        return
+    req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=body.encode("utf-8"), headers={
+        "Title": title.encode("utf-8").decode("latin-1"), "Priority": priority, "Click": URL})
+    try:
+        urllib.request.urlopen(req, timeout=15)
+    except Exception as e:
+        print(f"::warning::ntfy falló: {e!r}")
+
+
+def static_fingerprint():
+    """Hash de llms.txt + robots.txt: no pasan por el reto de Cloudflare y cambian si redespliegan con cambios."""
+    h = hashlib.sha256()
+    for path in ("/llms.txt", "/robots.txt"):
+        req = urllib.request.Request(URL.rstrip("/") + path, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            h.update(r.read())
+    return h.hexdigest()[:16]
+
+
+def ci_state(status):
+    """Estado entre corridas (restaurado con actions/cache): alerta de 'ciego' y de cambios del sitio."""
+    STATE_CI.parent.mkdir(exist_ok=True)
+    st = json.loads(STATE_CI.read_text()) if STATE_CI.exists() else {}
+    now = time.time()
+    st.setdefault("last_ok", now)
+    if status != "ERROR":
+        if st.get("blind_since_alert"):
+            ntfy("Watchdog HV: vuelve a ver", "El watchdog recuperó la vista. Banco de Talentos: " + status, "default")
+        st["last_ok"], st["blind_since_alert"] = now, None
+    else:
+        blind_h = (now - st["last_ok"]) / 3600
+        last_alert = st.get("blind_since_alert")
+        if blind_h >= BLIND_ALERT_H and (not last_alert or now - last_alert >= BLIND_REPEAT_H * 3600):
+            ntfy("Watchdog HV CIEGO", f"Cloudflare lo bloquea hace {blind_h:.1f} h. Entra tú a "
+                 "bancodetalentos.com.co y prueba el botón CARGA TU HOJA DE VIDA.", "urgent")
+            st["blind_since_alert"] = now
+    try:
+        fp = static_fingerprint()
+        if st.get("fingerprint") and fp != st["fingerprint"]:
+            ntfy("Banco de Talentos CAMBIÓ", "Cambiaron archivos del sitio (posible despliegue nuevo). "
+                 "Entra a revisar si ya abrió la carga de hoja de vida.", "urgent")
+        st["fingerprint"] = fp
+    except Exception as e:
+        print(f"::warning::huella del sitio falló: {e!r}")
+    STATE_CI.write_text(json.dumps(st))
+    print(f"estado: {st}")
+
+
 def main():
     if "--test" in sys.argv:
         notify("Banco de Talentos (PRUEBA)", "Así se verá el aviso cuando se habilite.")
@@ -109,6 +166,7 @@ def main():
     log(f"{status}  {detail}")
 
     if os.environ.get("GITHUB_ACTIONS"):
+        ci_state(status)
         # En la nube el aviso es el correo de GitHub por "Run failed": fallar = está abierto
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
             f.write(f"**{status}** — {detail}\n")
