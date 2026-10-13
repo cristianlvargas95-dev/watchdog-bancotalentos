@@ -26,6 +26,16 @@ jobs:
       # Chrome real (ya viene en ubuntu-latest) con pantalla virtual: pasa Cloudflare mejor que headless
       - name: Revisar boton CARGA TU HOJA DE VIDA
         run: xvfb-run -a python watchdog.py
+      # Push al celular (app ntfy) cuando el job falla = página habilitada (o modo prueba)
+      - name: Aviso al celular
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          curl -s -H "Title: HOJA DE VIDA HABILITADA" -H "Priority: urgent" -H "Tags: rotating_light" \
+               -H "Click: https://bancodetalentos.com.co/" \
+               -d "Banco de Talentos ya permite cargar la hoja de vida. Toca para entrar." \
+               "https://ntfy.sh/$NTFY_TOPIC"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
