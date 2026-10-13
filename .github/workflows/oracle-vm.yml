@@ -1,0 +1,55 @@
+name: Crear VM Oracle A1 (reintento hasta que haya cupo)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"  # respaldo por si se corta la cadena de auto-relanzado
+
+concurrency:
+  group: oracle-vm
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  crear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet oci
+      - name: Reintentar creacion
+        id: retry
+        env:
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_KEY: ${{ secrets.OCI_KEY }}
+          OCI_SUBNET: ${{ secrets.OCI_SUBNET }}
+          SSH_PUB: ${{ secrets.ORACLE_SSH_PUB }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MAX_MINUTES: "330"
+        run: |
+          set +e
+          python oracle/retry_a1.py
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+      # Sin cupo: se vuelve a lanzar a si mismo (GITHUB_TOKEN si puede disparar workflow_dispatch)
+      - name: Re-lanzar
+        if: steps.retry.outputs.code == '3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run oracle-vm.yml -R "$GITHUB_REPOSITORY" --ref main
+      # VM creada (o ya existia): apagar este workflow para que no siga corriendo
+      - name: Desactivar workflow
+        if: steps.retry.outputs.code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable oracle-vm.yml -R "$GITHUB_REPOSITORY"
+      - name: Fallo real
+        if: steps.retry.outputs.code == '1'
+        run: exit 1
