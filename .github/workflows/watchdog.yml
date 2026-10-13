@@ -33,6 +33,7 @@ jobs:
       - name: Revisar boton CARGA TU HOJA DE VIDA
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          HV_URL: ${{ secrets.HV_URL }}
         run: xvfb-run -a python watchdog.py
       - uses: actions/cache/save@v4
         if: always() && !inputs.prueba
@@ -44,9 +45,11 @@ jobs:
         if: failure()
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          HV_URL: ${{ secrets.HV_URL }}
         run: |
           curl -s -H "Title: HOJA DE VIDA HABILITADA" -H "Priority: urgent" -H "Tags: rotating_light" \
                -H "Click: https://bancodetalentos.com.co/" \
+               -H "Actions: view, Abrir pagina, https://bancodetalentos.com.co/; view, Abrir mi HV, $HV_URL" \
                -d "Banco de Talentos ya permite cargar la hoja de vida. Toca para entrar." \
                "https://ntfy.sh/$NTFY_TOPIC"
       - uses: actions/upload-artifact@v4

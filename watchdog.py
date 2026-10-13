@@ -114,8 +114,11 @@ def ntfy(title, body, priority="high"):
         topic = (BASE / "ntfy_topic.txt").read_text().strip()
     if not topic:
         return
-    req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=body.encode("utf-8"), headers={
-        "Title": title.encode("utf-8").decode("latin-1"), "Priority": priority, "Click": URL})
+    headers = {"Title": title.encode("utf-8").decode("latin-1"), "Priority": priority, "Click": URL}
+    hv = os.environ.get("HV_URL") or ((BASE / "hv_url.txt").read_text().strip() if (BASE / "hv_url.txt").exists() else "")
+    if hv:  # botones en la notificación: página + HV privada en Drive
+        headers["Actions"] = f"view, Abrir pagina, {URL}; view, Abrir mi HV, {hv}"
+    req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=body.encode("utf-8"), headers=headers)
     try:
         urllib.request.urlopen(req, timeout=15)
     except Exception as e:
