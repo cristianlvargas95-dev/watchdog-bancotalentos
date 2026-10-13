@@ -4,12 +4,20 @@ on:
   schedule:
     - cron: "7,22,37,52 * * * *"  # cada 15 min, evitando :00/:15/:30/:45 (GitHub los retrasa)
   workflow_dispatch:
+    inputs:
+      prueba:
+        description: "Simular que se habilito (para probar que llega el correo)"
+        type: boolean
+        default: false
 
 jobs:
   revisar:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: PRUEBA de aviso
+        if: ${{ inputs.prueba }}
+        run: echo "::error::PRUEBA - asi llegara el aviso cuando se habilite la carga de hoja de vida" && exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
