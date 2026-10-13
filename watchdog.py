@@ -32,6 +32,7 @@ PROFILE = BASE / "chrome-profile"   # perfil propio: conserva la cookie de Cloud
 LOG = BASE / "watchdog.log"
 STATE = BASE / "state.json"
 STATE_CI = BASE / "ci-state" / "state.json"
+BUNDLE = ""  # lo llena check() cuando logra ver la página
 BLIND_ALERT_H = 2      # horas sin ver la página antes de avisar "ciego"
 BLIND_REPEAT_H = 6     # repetir el aviso de ciego cada N horas
 CLOSED_RE =re.compile(r"siendo evaluado|retomemos", re.I)
@@ -79,9 +80,17 @@ def check():
                 btn.first.wait_for(state="visible", timeout=45000)
             except Exception:
                 page.screenshot(path=str(BASE / "fallo.png"))
-                if "Just a moment" in page.title():
+                html = page.content()
+                # el título del reto depende del idioma de Chrome ("Just a moment" / "Un momento")
+                if re.search(r"just a moment|un momento", page.title(), re.I) or "challenge-platform" in html \
+                        or "_cf_chl_opt" in html:
                     return "ERROR", "Cloudflare no dejó pasar"
                 return "CAMBIO", "ya no aparece el botón 'hoja de vida'"
+            global BUNDLE
+            # nombre del JS principal: cambia con CUALQUIER despliegue nuevo del sitio
+            BUNDLE = page.evaluate(
+                "[...document.scripts].map(s => s.src).find(s => /\\/_app\\/app-[^/]+\\.js/.test(s)) || ''"
+            ).rsplit("/", 1)[-1]
             try:
                 page.wait_for_load_state("networkidle", timeout=20000)
             except Exception:
@@ -135,6 +144,26 @@ def static_fingerprint():
     return h.hexdigest()[:16]
 
 
+def bundle_changed(st):
+    """Avisa si cambió el JS principal del sitio (= despliegue nuevo). Guarda el actual en st['bundle']."""
+    if not BUNDLE:
+        return
+    if st.get("bundle") and BUNDLE != st["bundle"]:
+        ntfy("Banco de Talentos CAMBIÓ", f"Publicaron una versión nueva del sitio ({st['bundle']} -> {BUNDLE}). "
+             "Entra a revisar si ya abrió la carga de hoja de vida.", "urgent")
+    st["bundle"] = BUNDLE
+
+
+def heartbeat(status):
+    """Ping a healthchecks.io cuando logró VER la página: si dejan de llegar, healthchecks avisa (cron caído/ciego)."""
+    hc = os.environ.get("HC_URL") or ((BASE / "hc_url.txt").read_text().strip() if (BASE / "hc_url.txt").exists() else "")
+    if hc and status != "ERROR":
+        try:
+            urllib.request.urlopen(hc, timeout=10)
+        except Exception as e:
+            print(f"::warning::healthcheck falló: {e!r}")
+
+
 def ci_state(status):
     """Estado entre corridas (restaurado con actions/cache): alerta de 'ciego' y de cambios del sitio."""
     STATE_CI.parent.mkdir(exist_ok=True)
@@ -152,6 +181,7 @@ def ci_state(status):
             ntfy("Watchdog HV CIEGO", f"Cloudflare lo bloquea hace {blind_h:.1f} h. Entra tú a "
                  "bancodetalentos.com.co y prueba el botón CARGA TU HOJA DE VIDA.", "urgent")
             st["blind_since_alert"] = now
+    bundle_changed(st)
     try:
         fp = static_fingerprint()
         if st.get("fingerprint") and fp != st["fingerprint"]:
@@ -172,7 +202,8 @@ def main():
         status, detail = check()
     except Exception as e:
         status, detail = "ERROR", repr(e)[:300]
-    log(f"{status}  {detail}")
+    log(f"{status}  {detail}  {BUNDLE}")
+    heartbeat(status)
 
     if os.environ.get("GITHUB_ACTIONS"):
         ci_state(status)
@@ -189,6 +220,7 @@ def main():
                "El botón CARGA TU HOJA DE VIDA ya no muestra el aviso de cierre. Entra ya.")
     if status != "ERROR":
         state["last"] = status
+    bundle_changed(state)
     state["errors"] = state.get("errors", 0) + 1 if status == "ERROR" else 0
     if state["errors"] == 6:  # ~1 hora fallando seguido
         notify("Watchdog Banco de Talentos", "Lleva 6 revisiones fallando en el PC. Revisa watchdog.log.", push=False)

@@ -34,6 +34,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           HV_URL: ${{ secrets.HV_URL }}
+          HC_URL: ${{ secrets.HC_URL }}
         run: xvfb-run -a python watchdog.py
       - uses: actions/cache/save@v4
         if: always() && !inputs.prueba
