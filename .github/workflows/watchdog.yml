@@ -2,7 +2,7 @@ name: HOJA DE VIDA HABILITADA - Banco de Talentos
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"  # cada 15 min, evitando :00/:15/:30/:45 (GitHub los retrasa)
   workflow_dispatch:
 
 jobs:
