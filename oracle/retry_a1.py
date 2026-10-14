@@ -85,7 +85,7 @@ def finish(inst, ocpus=None):
         time.sleep(10)
     log("LISTO: VM RUNNING (IP enviada por ntfy)")
     size = f" con {ocpus} OCPU" if ocpus else ""
-    notify("VM Oracle creada", f"watchdog-hv RUNNING{size} - IP {ip}. Avisale a Claude.", "urgent")
+    notify("VM Oracle creada", f"watchdog-hv RUNNING{size} - IP {ip}.", "urgent")
 
 
 def main():
