@@ -6,7 +6,7 @@ import oci
 
 NAME = "watchdog-hv"
 IMAGE_NAME = "Canonical-Ubuntu-24.04-aarch64"  # la mas reciente que coincida
-SIZES = [(4, 24), (2, 12), (1, 6)]  # del mas grande al mas chico; despues se puede agrandar
+SIZES = [(2, 12), (1, 6)]  # el limite A1 de la cuenta es 2 OCPU / 12 GB; del mas grande al mas chico
 CALL_PAUSE = 60      # entre intentos (el API da 429 si se va mas rapido)
 DEADLINE = time.time() + int(os.environ.get("MAX_MINUTES", "330")) * 60
 
@@ -110,6 +110,9 @@ def main():
                     time.sleep(120)
                 elif "capacity" in (e.message or "").lower():
                     log(f"intento {tries}: sin cupo {ocpus}/{mem}")
+                elif e.code == "LimitExceeded" and (ocpus, mem) != SIZES[-1]:
+                    # ese tamano supera el limite de la cuenta: se prueba el siguiente mas chico
+                    log(f"intento {tries}: {ocpus}/{mem} supera el limite de la cuenta")
                 else:
                     log(f"ERROR no esperado {e.status} {e.code}")
                     notify("Retry VM Oracle: error", f"{e.status} {e.code}: {e.message}"[:300])
